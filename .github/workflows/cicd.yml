@@ -22,9 +22,11 @@ jobs:
     needs: build
     runs-on: self-hosted
     steps:
+      - name: Free up Docker space
+        run: docker system prune -af --volumes
       - name: Pull image from docker hub
         run: docker pull asahithi/notenexus_backend:latest
       - name: Delete old container
         run: docker rm -f nodejs-app-container
       - name: Run Docker Container
-        run: docker run -d -p 4000:4000 --name nodejs-app-container -e MONGO_URI=${{ secrets.MONGODB_URI }} asahithi/notenexus_backend
+        run: docker run -d -p 4000:4000 --name nodejs-app-container -e MONGO_URI=${{ secrets.MONGO_URI }} asahithi/notenexus_backend
