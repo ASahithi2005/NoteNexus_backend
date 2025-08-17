@@ -7,7 +7,7 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-  origin: "*",           // or ["http://your-frontend-domain:3000"]
+  origin: "http://34.229.158.135:3000",           // or ["http://your-frontend-domain:3000"]
   credentials: true
 }));
 app.use(express.json());
