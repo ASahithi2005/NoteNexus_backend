@@ -6,13 +6,10 @@ import Student from '../Models/student.js';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
 const router = express.Router();
-const HUGGING_FACE_API_KEY = process.env.HUGGING_FACE_API_KEY;
 
 // Multer storage configuration
 const storage = multer.diskStorage({
@@ -234,99 +231,6 @@ router.delete('/:id/:section/:index', auth, async (req, res) => {
   } catch (err) {
     console.error('Delete File Error:', err);
     res.status(500).json({ error: 'Server error. Please try again.' });
-  }
-});
-
-/**
- * POST /api/courseDetail/:courseId/:section/:index/summarize
- * Summarize PDF file in the notes section
- */
-function chunkText(text, maxLength = 1000) {
-  const chunks = [];
-  for (let i = 0; i < text.length; i += maxLength) {
-    chunks.push(text.slice(i, i + maxLength));
-  }
-  return chunks;
-}
-
-async function summarizeWithHF(text) {
-  const response = await axios.post(
-    'https://api-inference.huggingface.co/models/facebook/bart-large-cnn',
-    { inputs: text },
-    {
-      headers: { Authorization: `Bearer ${HUGGING_FACE_API_KEY}` },
-      timeout: 60000,
-    }
-  );
-  if (response.data?.error) throw new Error(response.data.error);
-  if (!Array.isArray(response.data) || !response.data[0]?.summary_text) {
-    throw new Error('Invalid response from summarization API');
-  }
-  return response.data[0].summary_text;
-}
-
-router.post('/:courseId/:section/:index/summarize', auth, async (req, res) => {
-  try {
-    const { courseId, section, index } = req.params;
-
-    if (section !== 'notes') {
-      return res.status(400).json({ error: 'Summarization only supported for notes section' });
-    }
-
-    const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ error: 'Course not found' });
-
-    const fileEntry = course[section]?.[index];
-    if (!fileEntry) return res.status(404).json({ error: 'File not found at given index' });
-
-    const isMentor = req.user.role === 'mentor' && course.createdBy.toString() === req.user.id;
-    const isStudent = req.user.role === 'student' && course.studentsEnrolled.some(s => s.toString() === req.user.id);
-    if (!isMentor && !isStudent) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    if (!fileEntry.fileUrl.toLowerCase().endsWith('.pdf')) {
-      return res.status(400).json({ error: 'Summarization only supported for PDF files' });
-    }
-
-    const pdfPath = path.resolve(fileEntry.fileUrl);
-    if (!fs.existsSync(pdfPath)) {
-      return res.status(404).json({ error: 'PDF file not found on server' });
-    }
-
-    const data = new Uint8Array(fs.readFileSync(pdfPath));
-
-    // Fix for UnknownErrorException warning
-    pdfjsLib.GlobalWorkerOptions.standardFontDataUrl = '';
-
-    const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
-
-    let fullText = '';
-    const maxPages = Math.min(pdfDoc.numPages, 25);
-    for (let i = 1; i <= maxPages; i++) {
-      const page = await pdfDoc.getPage(i);
-      const content = await page.getTextContent();
-      const strings = content.items.map(item => item.str);
-      fullText += strings.join(' ') + '\n';
-    }
-
-    const chunks = chunkText(fullText);
-    const summaries = [];
-
-    for (const chunk of chunks) {
-      try {
-        const summary = await summarizeWithHF(chunk);
-        summaries.push(summary);
-      } catch (err) {
-        console.warn('Summarization failed for a chunk:', err.message);
-      }
-    }
-
-    const finalSummary = summaries.join('\n\n');
-    res.status(200).json({ summary: finalSummary });
-  } catch (err) {
-    console.error('Summarization route error:', err);
-    res.status(500).json({ error: 'Server error during summarization' });
   }
 });
 
