@@ -6,7 +6,10 @@ import path from 'path';
 dotenv.config();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: "*",           // or ["http://your-frontend-domain:3000"]
+  credentials: true
+}));
 app.use(express.json());
 
 const password = encodeURIComponent(process.env.MONGO_PASSWORD.trim());
